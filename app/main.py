@@ -2,12 +2,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
+from app.api.auth import router as auth_router
+from app.api.curriculum import router as curriculum_router
+from app.api.users import router as users_router
 from app.core.config import settings
 from app.db.database import engine
-from app.api.auth import router as auth_router
 
-from app.api.auth import router as auth_router
-from app.api.users import router as users_router
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -20,6 +20,8 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -28,6 +30,9 @@ app.add_middleware(
 
 
 app.include_router(auth_router)
+app.include_router(users_router)
+app.include_router(curriculum_router)
+
 
 @app.get("/")
 def root():
@@ -65,6 +70,3 @@ def database_health_check():
             "success": False,
             "error": str(exc),
         }
-
-app.include_router(auth_router)
-app.include_router(users_router)
