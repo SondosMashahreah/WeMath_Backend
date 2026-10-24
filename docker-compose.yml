@@ -1,0 +1,22 @@
+
+name: wemath
+
+services:
+  postgres:
+    image: postgres:17
+    container_name: wemath-postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: wemath
+      POSTGRES_USER: wemath
+      POSTGRES_PASSWORD: wemath_password
+
+    ports:
+      - "5433:5432"
+
+    volumes:
+      - wemath_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  wemath_postgres_data:
