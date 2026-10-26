@@ -11,11 +11,14 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
 
+    username: Mapped[str] = mapped_column(String(32), unique=True, nullable=False, index=True)
+    token_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+
     full_name: Mapped[str] = mapped_column(String(150), nullable=False)
-    email: Mapped[str] = mapped_column(
+    email: Mapped[str | None] = mapped_column(
         String(255),
         unique=True,
-        nullable=False,
+        nullable=True,
         index=True,
     )
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)

@@ -5,6 +5,7 @@ from app.models.role import Role
 
 
 ROLES = [
+    {"name": "parent", "description": "Parent or guardian"},
     {
         "name": "student",
         "description": "Student user",

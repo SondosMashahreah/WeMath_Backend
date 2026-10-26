@@ -6,13 +6,14 @@ from jwt.exceptions import InvalidTokenError
 from app.core.config import settings
 
 
-def create_access_token(subject: str) -> str:
+def create_access_token(subject: str, token_version: int = 0) -> str:
     expires_at = datetime.now(timezone.utc) + timedelta(
         minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
     )
 
     payload = {
         "sub": subject,
+        "ver": token_version,
         "exp": expires_at,
     }
 
@@ -23,7 +24,7 @@ def create_access_token(subject: str) -> str:
     )
 
 
-def decode_access_token(token: str) -> str | None:
+def decode_access_token(token: str) -> dict | None:
     try:
         payload = jwt.decode(
             token,
@@ -31,7 +32,7 @@ def decode_access_token(token: str) -> str | None:
             algorithms=[settings.JWT_ALGORITHM],
         )
 
-        return payload.get("sub")
+        return payload if payload.get("sub") else None
 
     except InvalidTokenError:
         return None

@@ -1,8 +1,13 @@
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+from app.domain.learning import DomainError
+from app.api.family import router as family_router
+from app.api.learning import router as learning_router
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.api.auth import router as auth_router
+from app.platform.api import install_platform
 from app.api.curriculum import router as curriculum_router
 from app.api.users import router as users_router
 from app.core.config import settings
@@ -29,9 +34,17 @@ app.add_middleware(
 )
 
 
+install_platform(app)
 app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(curriculum_router)
+app.include_router(family_router)
+app.include_router(learning_router)
+
+
+@app.exception_handler(DomainError)
+async def domain_error_handler(_request, exc):
+    return JSONResponse(status_code=exc.status, content={"detail": str(exc)})
 
 
 @app.get("/")

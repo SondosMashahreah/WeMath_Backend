@@ -20,9 +20,9 @@ def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
 ) -> User:
-    subject = decode_access_token(token)
+    claims = decode_access_token(token)
 
-    if not subject:
+    if not claims:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
@@ -30,8 +30,8 @@ def get_current_user(
         )
 
     try:
-        user_id = int(subject)
-    except ValueError:
+        user_id = int(claims["sub"])
+    except (ValueError, TypeError):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token subject",
@@ -39,7 +39,7 @@ def get_current_user(
 
     user = get_user_by_id(db, user_id)
 
-    if not user or not user.is_active:
+    if not user or not user.is_active or claims.get("ver", 0) != user.token_version:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not available",
