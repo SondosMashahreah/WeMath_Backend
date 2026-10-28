@@ -67,6 +67,11 @@ def library(category: str | None = None, q: str = Query(default="", max_length=1
     return service.list_entries(db, "teacher_resources", category=category, q=q, offset=offset, limit=limit, teacher=True)
 
 
+@router.get("/teachers/library/{entry_id}")
+def library_entry(entry_id: str, user=Depends(auth.teacher_required), db: Session = Depends(get_db)):
+    return service.get_teacher_entry(db, entry_id)
+
+
 @router.get("/teachers/documents")
 def documents(kind: Literal["plan", "assessment"] = "plan", archived: bool = False,
               offset: int = Query(default=0, ge=0), limit: int = Query(default=6, ge=1, le=40),

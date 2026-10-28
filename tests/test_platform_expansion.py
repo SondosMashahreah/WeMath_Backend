@@ -167,3 +167,21 @@ def test_guest_is_readonly_and_public_entries_cannot_be_written(client):
     assert client.post("/api/platform/entries", json={}).status_code == 405
     with Session(client.db_engine) as db:
         assert db.scalars(select(User)).all() == []
+
+
+def test_teacher_library_direct_link_requires_teacher_and_published_entry(client):
+    headers, session = register(client)
+    entry_id = client.get('/api/platform/teachers/library', headers=headers).json()['items'][0]['id']
+    url = f'/api/platform/teachers/library/{entry_id}'
+    assert client.get(url).status_code == 401
+    family_token = jwt.encode({'sub': str(session['user']['id']), 'exp': datetime.now(timezone.utc) + timedelta(minutes=5), 'ver': 0}, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+    assert client.get(url, headers={'Authorization': f'Bearer {family_token}'}).status_code == 401
+    assert client.get(url, headers=headers).json()['id'] == entry_id
+    assert client.get(f'/api/platform/entries/{entry_id}').status_code == 404
+    public_id = client.get('/api/platform/entries?section=workshops').json()['items'][0]['id']
+    assert client.get(f'/api/platform/teachers/library/{public_id}', headers=headers).status_code == 404
+    assert client.get('/api/platform/teachers/library/missing-entry', headers=headers).status_code == 404
+    with Session(client.db_engine) as db:
+        db.get(PlatformEntry, entry_id).published = False
+        db.commit()
+    assert client.get(url, headers=headers).status_code == 404

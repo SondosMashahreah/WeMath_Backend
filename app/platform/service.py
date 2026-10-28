@@ -40,6 +40,13 @@ def get_entry(db, entry_id):
     return entry_payload(row)
 
 
+def get_teacher_entry(db, entry_id):
+    row = db.get(PlatformEntry, entry_id)
+    if not row or not row.published or row.section != "teacher_resources":
+        raise PlatformError("المحتوى غير متاح", 404)
+    return entry_payload(row)
+
+
 def guest_catalog(db):
     books = db.scalars(select(CurriculumBook).options(selectinload(CurriculumBook.units).selectinload(CurriculumUnit.lessons)).order_by(CurriculumBook.grade, CurriculumBook.id)).all()
     result = []
