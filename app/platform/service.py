@@ -1,16 +1,14 @@
-from datetime import date
+from datetime import date, datetime, timezone
 
 from sqlalchemy import func, or_, select
-from sqlalchemy.orm import selectinload
 
-from app.api.curriculum import book_payload
 from app.models.curriculum import CurriculumBook, CurriculumLesson, CurriculumUnit
 from .domain import PlatformError, SECTIONS
 from .models import PlatformEntry, TeacherDocument
 
 
 def entry_payload(row):
-    return {key: getattr(row, key) for key in ("id", "section", "category", "title", "summary", "body", "source_url", "event_date", "archived", "is_demo", "activity")}
+    return {key: getattr(row, key) for key in ("id", "section", "category", "title", "summary", "body", "source_url", "event_date", "archived", "is_demo", "activity", "details", "published_at")}
 
 
 def list_entries(db, section, category=None, archived=False, q="", offset=0, limit=6, month=None, teacher=False):
@@ -18,11 +16,20 @@ def list_entries(db, section, category=None, archived=False, q="", offset=0, lim
         raise PlatformError("القسم غير متاح", 404)
     if category and category not in SECTIONS[section]:
         raise PlatformError("التصنيف غير متاح", 404)
-    filters = [PlatformEntry.section == section, PlatformEntry.published.is_(True), PlatformEntry.archived == archived]
+    filters = [PlatformEntry.section == section, PlatformEntry.published.is_(True)]
+    if section == "competitions" and not month:
+        today = date.today()
+        filters.append(or_(PlatformEntry.archived.is_(True), PlatformEntry.event_date < today) if archived else (PlatformEntry.archived.is_(False) & or_(PlatformEntry.event_date.is_(None), PlatformEntry.event_date >= today)))
+    elif section != "competitions":
+        filters.append(PlatformEntry.archived == archived)
     if category:
         filters.append(PlatformEntry.category == category)
     if q.strip():
-        filters.append(or_(PlatformEntry.title.icontains(q.strip(), autoescape=True), PlatformEntry.summary.icontains(q.strip(), autoescape=True)))
+        filters.append(or_(
+            PlatformEntry.title.icontains(q.strip(), autoescape=True),
+            PlatformEntry.summary.icontains(q.strip(), autoescape=True),
+            PlatformEntry.body.icontains(q.strip(), autoescape=True),
+        ))
     if month:
         year, number = map(int, month.split("-"))
         first = date(year, number, 1)
@@ -35,7 +42,7 @@ def list_entries(db, section, category=None, archived=False, q="", offset=0, lim
 
 def get_entry(db, entry_id):
     row = db.get(PlatformEntry, entry_id)
-    if not row or not row.published or row.section == "teacher_resources":
+    if not row or not row.published or row.section == "teacher_resources" or row.section not in SECTIONS:
         raise PlatformError("المحتوى غير متاح", 404)
     return entry_payload(row)
 
@@ -47,15 +54,36 @@ def get_teacher_entry(db, entry_id):
     return entry_payload(row)
 
 
-def guest_catalog(db):
-    books = db.scalars(select(CurriculumBook).options(selectinload(CurriculumBook.units).selectinload(CurriculumUnit.lessons)).order_by(CurriculumBook.grade, CurriculumBook.id)).all()
-    result = []
-    for book in books:
-        payload = book_payload(book, include_units=False)
-        sample = next(((unit, lesson) for unit in book.units for lesson in unit.lessons), None)
-        payload["sample"] = {"unit": sample[0].title, "lesson": sample[1].title, "lesson_id": sample[1].id} if sample else None
-        result.append(payload)
-    return {"books": result, "preview": True}
+def save_competition(db, data, publisher_id):
+    row = db.get(PlatformEntry, data.id)
+    created = row is None
+    if row is None:
+        row = PlatformEntry(id=data.id, section="competitions", is_demo=False)
+        db.add(row)
+    elif row.section != "competitions":
+        raise PlatformError("المعرّف مستخدم في قسم آخر", 409)
+    row.category = data.category
+    row.title = data.title
+    row.summary = data.summary
+    row.body = data.body
+    row.source_url = data.source_url
+    row.event_date = data.event_date
+    row.archived = data.archived
+    row.published = data.published
+    row.is_demo = False
+    row.activity = None
+    row.details = {
+        "organizer": data.organizer, "audience": data.audience, "location": data.location,
+        "registration_start": data.registration_start.isoformat() if data.registration_start else None,
+        "registration_end": data.registration_end.isoformat() if data.registration_end else None,
+        "examples": data.examples, "attachments": data.attachments, "results": data.results, "publisher_id": publisher_id,
+    }
+    if data.published and row.published_at is None:
+        row.published_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(row)
+    notify = created and row.published and not row.archived and row.event_date >= date.today()
+    return entry_payload(row), notify
 
 
 def document_payload(row):

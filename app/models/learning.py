@@ -9,6 +9,7 @@ class StudentProfile(Base):
     __table_args__ = (CheckConstraint("grade BETWEEN 1 AND 12", name="ck_student_grade"),)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
     grade: Mapped[int | None] = mapped_column(Integer)
+    track: Mapped[str | None] = mapped_column(String(150), nullable=True)
     identity_number: Mapped[str | None] = mapped_column(String(12))
     school: Mapped[str | None] = mapped_column(String(150))
     phone: Mapped[str | None] = mapped_column(String(20))
@@ -37,3 +38,18 @@ class LessonProgress(Base):
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class AssessmentResult(Base):
+    __tablename__ = "assessment_results"
+    __table_args__ = (
+        UniqueConstraint("student_id", "assessment_key", name="uq_student_assessment_result"),
+        CheckConstraint("score >= 0 AND max_score > 0 AND score <= max_score", name="ck_assessment_score"),
+    )
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    assessment_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    title: Mapped[str] = mapped_column(String(180), nullable=False)
+    score: Mapped[int] = mapped_column(Integer, nullable=False)
+    max_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

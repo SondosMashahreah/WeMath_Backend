@@ -3,7 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from app.domain.learning import DomainError
 from app.models.curriculum import CurriculumBook, CurriculumLesson, CurriculumUnit
-from app.models.learning import LessonProgress, StudentProfile
+from app.models.learning import AssessmentResult, LessonProgress, StudentProfile
 from app.models.user import User
 from app.repositories.lesson_resources import for_lesson
 
@@ -17,6 +17,8 @@ def student_lesson(db: Session, student_id: int, lesson_id: str):
         raise DomainError("أكمل صفك الدراسي أولًا", 409)
     if lesson.unit.book.grade != profile.grade:
         raise DomainError("هذا الدرس ليس ضمن صفك الدراسي", 403)
+    if profile.track and lesson.unit.book.classification_label and lesson.unit.book.classification_label != profile.track:
+        raise DomainError("هذا الدرس ليس ضمن مسارك الدراسي", 403)
     return lesson
 
 
@@ -48,6 +50,11 @@ def record_progress(db: Session, student_id: int, lesson_id: str, activity: str)
 def progress_payload(progress):
     return {"lesson_id": progress.lesson_id, "status": progress.status, "last_activity": progress.last_activity,
             "started_at": progress.started_at, "updated_at": progress.updated_at, "completed_at": progress.completed_at}
+
+
+def results_summary(db: Session, student_id: int):
+    rows = db.scalars(select(AssessmentResult).where(AssessmentResult.student_id == student_id).order_by(AssessmentResult.recorded_at.desc(), AssessmentResult.id.desc())).all()
+    return {"results": [{"id": row.id, "assessment_key": row.assessment_key, "title": row.title, "score": row.score, "max_score": row.max_score, "recorded_at": row.recorded_at} for row in rows]}
 
 
 def progress_summary(db: Session, student_id: int):

@@ -42,7 +42,7 @@ def client():
         book.units = [unit]
         db.add(book)
         db.add(CurriculumBook(id="book2", grade=2, semester=1, period_label="الفصل الأول", title="رياضيات 2", source_url="https://example.org/book2.pdf", catalog_urls=[], source_sha256="1" * 64, snapshot_date=date.today()))
-        for data in json.loads((Path(__file__).parents[1] / "alembic/data/platform_catalog_20261026.json").read_text()):
+        for data in json.loads((Path(__file__).parents[1] / "alembic/data/platform_catalog_20261026.json").read_text(encoding="utf-8")):
             if data["event_date"]: data["event_date"] = date.fromisoformat(data["event_date"])
             db.add(PlatformEntry(**data))
         db.commit()
@@ -161,9 +161,8 @@ def test_assistant_is_bounded_and_returns_real_catalog_links(client):
     assert client.post("/api/platform/assistant", json={"message": "__import__('os')"}).json()["sources"] == []
 
 
-def test_guest_is_readonly_and_public_entries_cannot_be_written(client):
-    data = client.get("/api/platform/guest/catalog").json()
-    assert data["preview"] and data["books"][0]["sample"]["lesson"] == "الجمع"
+def test_guest_endpoint_is_removed_and_public_entries_cannot_be_written(client):
+    assert client.get("/api/platform/guest/catalog").status_code == 404
     assert client.post("/api/platform/entries", json={}).status_code == 405
     with Session(client.db_engine) as db:
         assert db.scalars(select(User)).all() == []

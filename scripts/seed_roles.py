@@ -22,10 +22,6 @@ ROLES = [
         "name": "supervisor",
         "description": "Educational supervisor",
     },
-    {
-        "name": "guest",
-        "description": "Guest user with limited access",
-    },
 ]
 
 

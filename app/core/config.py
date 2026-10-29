@@ -20,6 +20,14 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
+    SMTP_HOST: str = "127.0.0.1"
+    SMTP_PORT: int = 1025
+    SMTP_USERNAME: str | None = None
+    SMTP_PASSWORD: str | None = None
+    SMTP_STARTTLS: bool = False
+    SMTP_FROM_EMAIL: str = "noreply@wemath.local"
+    SMTP_FROM_NAME: str = "WE MATH"
+
     @field_validator("JWT_SECRET_KEY")
     @classmethod
     def reject_example_key(cls, value):

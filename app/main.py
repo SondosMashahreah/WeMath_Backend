@@ -1,3 +1,5 @@
+from time import perf_counter
+
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from app.domain.learning import DomainError
@@ -18,6 +20,16 @@ app = FastAPI(
     title=settings.APP_NAME,
     version="1.0.0",
 )
+
+
+@app.middleware("http")
+async def request_timing(request, call_next):
+    started = perf_counter()
+    response = await call_next(request)
+    if request.url.path.startswith(("/api/auth", "/api/parents")):
+        elapsed_ms = (perf_counter() - started) * 1000
+        response.headers["Server-Timing"] = f"app;dur={elapsed_ms:.1f}"
+    return response
 
 
 app.add_middleware(

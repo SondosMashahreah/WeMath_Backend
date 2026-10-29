@@ -9,10 +9,12 @@ RESOURCE_FILE = Path(__file__).resolve().parents[1] / "data" / "lesson_resources
 
 def defaults():
     return [
-        {"id": "learn", "label": "تعلّم", "demo": True, "text": "افتح الكتاب واقرأ الدرس، ثم اكتب فكرة فهمتها وسؤالًا ترغب في مناقشته."},
-        {"id": "video", "label": "شاهد", "demo": True, "url": None, "text": "مساحة مخصّصة لفيديو الدرس. لم يُرفق فيديو لهذا الدرس بعد."},
-        {"id": "practice", "label": "تدرّب", "demo": True, "text": "تجربة عامة للواجهة وليست اختبارًا من المنهاج.", "question": "كم ضلعًا للمسدس؟", "choices": [4, 5, 6], "answer": 6},
-        {"id": "game", "label": "استكشف", "demo": True, "text": "غيّر عدد أضلاع الشكل ولاحظ الفرق. نشاط هندسي تجريبي عام."},
+        {"id": "quiz", "label": "اختبار إلكتروني", "demo": True, "text": "الاختبار الإلكتروني سيُفعّل في مرحلة لاحقة."},
+        {"id": "worksheet", "label": "أوراق عمل إلكترونية", "demo": True, "text": "مساحة أوراق العمل الإلكترونية لهذا الدرس."},
+        {"id": "film", "label": "فلم", "demo": True, "url": None, "text": "مساحة مخصّصة لفلم الدرس. لم يُرفق ملف لهذا الدرس بعد."},
+        {"id": "activity", "label": "أنشطة", "demo": True, "text": "مساحة الأنشطة المرتبطة بهذا الدرس."},
+        {"id": "game", "label": "ألعاب", "demo": True, "text": "نشاط تفاعلي تجريبي إلى أن تضاف ألعاب الدرس الفعلية."},
+        {"id": "story_video", "label": "القصة المروية أو الفيديو", "demo": True, "url": None, "text": "مساحة القصة المروية أو الفيديو المرتبط بالدرس."},
     ]
 
 
@@ -27,6 +29,6 @@ def for_lesson(lesson_id: str):
     for resource in result:
         replacement = custom.get(resource["id"], {})
         resource.update({k: v for k, v in replacement.items() if k in resource and k != "id"})
-        if resource["id"] == "video" and resource.get("url") and urlparse(resource["url"]).scheme != "https":
+        if resource["id"] in {"film", "story_video"} and resource.get("url") and urlparse(resource["url"]).scheme != "https":
             resource["url"] = None
     return result

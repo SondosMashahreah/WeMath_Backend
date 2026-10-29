@@ -4,7 +4,7 @@ from app.auth.password import hash_password
 from app.domain.learning import DomainError, available_slot
 from app.models.learning import ParentChild, StudentProfile
 from app.models.user import User
-from app.services.auth_service import authenticate_user, create_account, get_user_roles, user_payload
+from app.services.auth_service import authenticate_user, create_account, get_user_roles, user_payload, validate_student_track
 
 
 def reserve_slot(db: Session, parent_id: int):
@@ -58,10 +58,13 @@ def update_child(db: Session, parent_id: int, child_id: int, data):
     if profile is None:
         profile = StudentProfile(user_id=child_id)
         db.add(profile)
-    if child.is_active != data.is_active or profile.grade != data.grade:
+    track = validate_student_track(db, data.grade, data.track)
+    if child.is_active != data.is_active or profile.grade != data.grade or profile.track != track:
         child.token_version += 1
     child.full_name, child.is_active = data.full_name, data.is_active
-    for key, value in data.model_dump(exclude={"full_name", "is_active"}).items():
+    values = data.model_dump(exclude={"full_name", "is_active"})
+    values["track"] = track
+    for key, value in values.items():
         setattr(profile, key, value)
     return child
 

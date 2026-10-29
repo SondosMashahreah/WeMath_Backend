@@ -79,6 +79,38 @@ class ArchiveWrite(StrictModel):
     version: int = Field(ge=1)
 
 
+class CompetitionWrite(StrictModel):
+    id: str = Field(min_length=1, max_length=80, pattern=r"^[a-z0-9_-]+$")
+    category: Literal["scientific", "international"]
+    title: str = Field(min_length=2, max_length=180)
+    summary: str = Field(min_length=2, max_length=500)
+    body: str = Field(min_length=2, max_length=30000)
+    event_date: date
+    registration_start: date | None = None
+    registration_end: date | None = None
+    organizer: str = Field(default="", max_length=180)
+    audience: str = Field(default="", max_length=300)
+    location: str = Field(default="", max_length=300)
+    source_url: str | None = Field(default=None, max_length=2000)
+    examples: list[str] = Field(default_factory=list, max_length=30)
+    attachments: list[str] = Field(default_factory=list, max_length=30)
+    results: str | None = Field(default=None, max_length=2000)
+    archived: bool = False
+    published: bool = True
+
+    @model_validator(mode="after")
+    def validate_competition(self):
+        if self.registration_start and self.registration_end and self.registration_end < self.registration_start:
+            raise ValueError("نهاية التسجيل يجب ألا تسبق بدايته")
+        for value in [self.source_url, *self.attachments]:
+            if not value:
+                continue
+            url = urlsplit(value)
+            if url.scheme != "https" or not url.hostname or url.username or url.password:
+                raise ValueError("الروابط الخارجية يجب أن تكون HTTPS صالحة")
+        return self
+
+
 class EntryWrite(StrictModel):
     id: str = Field(min_length=1, max_length=80, pattern=r"^[a-z0-9_-]+$")
     section: str

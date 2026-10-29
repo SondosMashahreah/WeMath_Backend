@@ -7,7 +7,7 @@ from app.models.user import User
 from app.schemas.auth import ChildCreateRequest, ChildUpdateRequest, LoginRequest, PasswordResetRequest
 from app.services import family_service as family
 from app.services.auth_service import user_payload
-from app.services.learning_service import progress_summary, lesson_resources
+from app.services.learning_service import progress_summary, results_summary, lesson_resources
 
 router = APIRouter(prefix="/api/parents", tags=["Family"])
 parent_user = require_roles("parent")
@@ -65,6 +65,12 @@ def reset_password(child_id: int, data: PasswordResetRequest, parent: User = Dep
 def child_progress(child_id: int, parent: User = Depends(parent_user), db: Session = Depends(get_db)):
     family.owned_child(db, parent.id, child_id)
     return progress_summary(db, child_id)
+
+
+@router.get("/children/{child_id}/results")
+def child_results(child_id: int, parent: User = Depends(parent_user), db: Session = Depends(get_db)):
+    family.owned_child(db, parent.id, child_id)
+    return results_summary(db, child_id)
 
 
 @router.get("/children/{child_id}/lessons/{lesson_id}")

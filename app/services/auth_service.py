@@ -5,6 +5,7 @@ from app.models.role import Role
 from app.models.user import User
 from app.models.user_role import UserRole
 from app.models.learning import StudentProfile
+from app.models.curriculum import CurriculumBook
 
 
 def get_user_by_email(db: Session, email: str) -> User | None:
@@ -17,6 +18,23 @@ def get_user_by_id(db: Session, user_id: int) -> User | None:
 
 def get_user_roles(db: Session, user_id: int) -> list[str]:
     return list(db.scalars(select(Role.name).join(UserRole).where(UserRole.user_id == user_id)))
+
+
+def available_tracks(db: Session, grade: int) -> list[str]:
+    return list(db.scalars(select(CurriculumBook.classification_label).where(
+        CurriculumBook.grade == grade, CurriculumBook.classification_label.is_not(None)
+    ).distinct().order_by(CurriculumBook.classification_label)))
+
+
+def validate_student_track(db: Session, grade: int | None, track: str | None):
+    if grade not in (11, 12):
+        return None
+    if not track:
+        return None
+    options = available_tracks(db, grade)
+    if options and track not in options:
+        raise ValueError("???? ?????? ??????? ?? ??? ??? ????")
+    return track
 
 
 def create_account(db: Session, data) -> User:
@@ -34,7 +52,10 @@ def create_account(db: Session, data) -> User:
     db.flush()
     db.add(UserRole(user_id=user.id, role_id=role.id))
     if data.role == "student":
-        db.add(StudentProfile(user_id=user.id, **data.model_dump(include={"grade", "identity_number", "school", "phone", "directorate"})))
+        track = validate_student_track(db, data.grade, data.track)
+        profile = data.model_dump(include={"grade", "identity_number", "school", "phone", "directorate"})
+        profile["track"] = track
+        db.add(StudentProfile(user_id=user.id, **profile))
     db.flush()
     return user
 
@@ -51,5 +72,5 @@ def user_payload(db: Session, user: User):
     return {
         "id": user.id, "username": user.username, "full_name": user.full_name,
         "email": user.email, "is_active": user.is_active, "roles": get_user_roles(db, user.id),
-        **{name: getattr(profile, name) if profile else None for name in ["grade", "school", "phone", "directorate", "identity_number"]},
+        **{name: getattr(profile, name) if profile else None for name in ["grade", "track", "school", "phone", "directorate", "identity_number"]},
     }

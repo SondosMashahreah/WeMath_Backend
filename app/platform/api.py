@@ -1,13 +1,14 @@
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
+from app.auth.dependencies import require_roles
 from app.db.database import get_db
-from . import assistant, auth, service
+from . import assistant, auth, notifications, service
 from .domain import PlatformError, SECTIONS
-from .schemas import ArchiveWrite, AssistantRequest, Credentials, DocumentWrite, TeacherRegister
+from .schemas import ArchiveWrite, AssistantRequest, CompetitionWrite, Credentials, DocumentWrite, TeacherRegister
 
 router = APIRouter(prefix="/api/platform", tags=["Platform extensions"])
 
@@ -30,9 +31,12 @@ def entry(entry_id: str, db: Session = Depends(get_db)):
     return service.get_entry(db, entry_id)
 
 
-@router.get("/guest/catalog")
-def guest(db: Session = Depends(get_db)):
-    return service.guest_catalog(db)
+@router.post("/competitions", status_code=201)
+def publish_competition(data: CompetitionWrite, background: BackgroundTasks, user=Depends(require_roles("admin", "supervisor")), db: Session = Depends(get_db)):
+    payload, notify = service.save_competition(db, data, user.id)
+    if notify:
+        background.add_task(notifications.dispatch_competition_email, payload["id"])
+    return payload
 
 
 @router.post("/assistant")
