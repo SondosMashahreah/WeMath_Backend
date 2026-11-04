@@ -1,47 +1,151 @@
-import hashlib
-from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from datetime import timedelta
+from functools import lru_cache
+from io import BytesIO
+from uuid import uuid4
+
+from minio import Minio
+from app.core.config import settings
 
 
-class Settings(BaseSettings):
-    APP_NAME: str = "WeMath API"
-    APP_HOST: str = "127.0.0.1"
-    APP_PORT: int = 8100
+BACKEND = settings.STORAGE_BACKEND.lower()
 
-    DB_HOST: str = "localhost"
-    DB_PORT: int = 5433
-    DB_NAME: str = "wemath"
-    DB_USER: str = "wemath"
-    DB_PASSWORD: str = "wemath_password"
+if BACKEND not in ("minio", "supabase"):
+    raise ValueError("STORAGE_BACKEND must be minio or supabase")
 
-    DATABASE_URL: str
 
-    JWT_SECRET_KEY: str = Field(min_length=32)
-    JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
-
-    FRONTEND_URL: str = "http://localhost:5173"
-
-    SMTP_HOST: str = "127.0.0.1"
-    SMTP_PORT: int = 1025
-    SMTP_USERNAME: str | None = None
-    SMTP_PASSWORD: str | None = None
-    SMTP_STARTTLS: bool = False
-    SMTP_FROM_EMAIL: str = "noreply@wemath.local"
-    SMTP_FROM_NAME: str = "WE MATH"
-
-    @field_validator("JWT_SECRET_KEY")
-    @classmethod
-    def reject_example_key(cls, value):
-        if value.startswith("CHANGE_ME") or hashlib.sha256(value.encode()).hexdigest() == "99fb1f136b270197eaf2d2b2c2b0715f6a873a733e3609835fe3713020e9b22d":
-            raise ValueError("Generate a new JWT_SECRET_KEY; the example key must not be used")
-        return value
-
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore",
+# MinIO client is only created for local storage.
+_client = (
+    Minio(
+        settings.MINIO_ENDPOINT,
+        access_key=settings.MINIO_ACCESS_KEY,
+        secret_key=settings.MINIO_SECRET_KEY,
+        secure=settings.MINIO_SECURE,
     )
+    if BACKEND == "minio"
+    else None
+)
 
 
-settings = Settings()
+@lru_cache(maxsize=1)
+def supabase_bucket():
+    from supabase import create_client
+
+    if not settings.SUPABASE_URL or not settings.SUPABASE_SERVICE_ROLE_KEY:
+        raise RuntimeError("Supabase Storage credentials are missing")
+
+    client = create_client(
+        settings.SUPABASE_URL,
+        settings.SUPABASE_SERVICE_ROLE_KEY,
+    )
+    return client.storage.from_(settings.SUPABASE_STORAGE_BUCKET)
+
+
+def ensure_bucket() -> None:
+    if BACKEND == "minio":
+        if not _client.bucket_exists(settings.MINIO_BUCKET):
+            _client.make_bucket(settings.MINIO_BUCKET)
+    # Supabase bucket is created once in the dashboard.
+
+
+def _upload(object_name: str, data: bytes, content_type: str) -> str:
+    if BACKEND == "supabase":
+        supabase_bucket().upload(
+            path=object_name,
+            file=data,
+            file_options={
+                "content-type": content_type,
+                "upsert": "false",
+            },
+        )
+    else:
+        ensure_bucket()
+        _client.put_object(
+            settings.MINIO_BUCKET,
+            object_name,
+            BytesIO(data),
+            length=len(data),
+            content_type=content_type,
+        )
+
+    return object_name
+
+
+def upload_avatar(user_id: int, data: bytes, content_type: str, extension: str) -> str:
+    name = f"users/{user_id}/avatar-{uuid4().hex}.{extension}"
+    return _upload(name, data, content_type)
+
+
+def upload_research_file(
+    user_id: int,
+    submission_id: int,
+    version: int,
+    data: bytes,
+    content_type: str,
+    extension: str,
+) -> str:
+    name = (
+        f"research/{user_id}/{submission_id}/"
+        f"v{version}-{uuid4().hex}.{extension}"
+    )
+    return _upload(name, data, content_type)
+
+
+def upload_certificate(user_id: int, data: bytes) -> str:
+    name = f"certificates/{user_id}/{uuid4().hex}.pdf"
+    return _upload(name, data, "application/pdf")
+
+
+def delete_object(object_name: str | None) -> None:
+    if not object_name:
+        return
+
+    try:
+        if BACKEND == "supabase":
+            supabase_bucket().remove([object_name])
+        else:
+            _client.remove_object(settings.MINIO_BUCKET, object_name)
+    except Exception:
+        # Preserve existing non-blocking delete behavior.
+        pass
+
+
+def _presigned_url(object_name: str | None) -> str | None:
+    if not object_name:
+        return None
+
+    if BACKEND == "minio":
+        return _client.presigned_get_object(
+            settings.MINIO_BUCKET,
+            object_name,
+            expires=timedelta(hours=1),
+        )
+
+    result = supabase_bucket().create_signed_url(
+        object_name,
+        3600,
+    )
+    signed = result.get("signedURL") or result.get("signedUrl")
+
+    if not signed:
+        raise RuntimeError("Supabase did not return a signed URL")
+
+    if signed.startswith(("https://", "http://")):
+        return signed
+
+    base = settings.SUPABASE_URL.rstrip("/")
+
+    if signed.startswith("/storage/"):
+        return base + signed
+    if signed.startswith("/object/"):
+        return base + "/storage/v1" + signed
+
+    return base + "/storage/v1/" + signed.lstrip("/")
+
+
+def presigned_avatar_url(object_name: str | None) -> str | None:
+    return _presigned_url(object_name)
+
+
+def presigned_file_url(object_name: str | None) -> str | None:
+    return _presigned_url(object_name)
