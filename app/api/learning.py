@@ -13,7 +13,7 @@ student_user = require_roles("student")
 
 class ProgressRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    activity: Literal["opened", "book", "learn", "video", "practice", "game", "completed"]
+    activity: Literal["opened", "book", "learn", "video", "practice", "game", "completed", "quiz", "worksheet", "film", "activity", "story_video"]
 
 
 @router.get("/progress")

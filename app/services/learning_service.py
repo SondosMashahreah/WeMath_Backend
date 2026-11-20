@@ -6,6 +6,7 @@ from app.models.curriculum import CurriculumBook, CurriculumLesson, CurriculumUn
 from app.models.learning import AssessmentResult, LessonProgress, StudentProfile
 from app.models.user import User
 from app.repositories.lesson_resources import for_lesson
+from app.cms.service import live_resources
 
 
 def student_lesson(db: Session, student_id: int, lesson_id: str):
@@ -27,7 +28,7 @@ def lesson_resources(db: Session, student_id: int, lesson_id: str):
     book = lesson.unit.book
     return {"id": lesson.id, "title": lesson.title, "unit_title": lesson.unit.title,
             "book": {"id": book.id, "title": book.title, "source_url": book.source_url, "period_label": book.period_label, "classification_label": book.classification_label},
-            "resources": for_lesson(lesson_id)}
+            "resources": live_resources(db, lesson_id, for_lesson(lesson_id))}
 
 
 def record_progress(db: Session, student_id: int, lesson_id: str, activity: str):

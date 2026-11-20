@@ -4,3 +4,5 @@ from app.models.user_role import UserRole
 
 from app.models.curriculum import CurriculumBook, CurriculumUnit, CurriculumLesson
 from app.models.learning import StudentProfile, ParentChild, LessonProgress, AssessmentResult
+
+from app.cms.models import Workspace, Membership, Content, PublishedResource, Audit
