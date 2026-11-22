@@ -1,3 +1,4 @@
+from app.exams.schemas import DraftQuestion
 from typing import Literal
 from datetime import date
 from urllib.parse import urlsplit
@@ -33,20 +34,6 @@ class StaffCreate(AccountCredentials):
 class StaffUpdate(Strict):
     is_active: bool
     password: str | None = Field(default=None, min_length=8, max_length=128)
-
-
-class DraftQuestion(Strict):
-    prompt: str = Field(default="", max_length=1500)
-    options: list[str] = Field(min_length=2, max_length=6)
-    correct: int = Field(default=-1, ge=-1, le=5)
-    explanation: str = Field(default="", max_length=2000)
-
-    @field_validator("options")
-    @classmethod
-    def bound_options(cls, value):
-        if any(len(option) > 500 for option in value):
-            raise ValueError("كل خيار بحد أقصى 500 حرف")
-        return value
 
 
 class Payload(Strict):

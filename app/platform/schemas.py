@@ -1,3 +1,4 @@
+from app.exams.schemas import Question, Exam as AssessmentContent
 from datetime import date
 from typing import Literal
 from urllib.parse import urlsplit
@@ -32,27 +33,6 @@ class PlanContent(StrictModel):
     assessment: str = Field(min_length=1, max_length=4000)
     materials: str = Field(default="", max_length=2000)
     duration: int = Field(default=45, ge=5, le=180)
-
-
-class Question(StrictModel):
-    prompt: str = Field(min_length=1, max_length=1500)
-    options: list[str] = Field(min_length=2, max_length=6)
-    correct: int = Field(ge=0, le=5)
-    explanation: str = Field(default="", max_length=2000)
-
-    @model_validator(mode="after")
-    def validate_options(self):
-        self.options = [value.strip() for value in self.options]
-        if any(not value or len(value) > 500 for value in self.options):
-            raise ValueError("الإجابات مطلوبة وبحد أقصى 500 حرف")
-        if len(set(self.options)) != len(self.options) or self.correct >= len(self.options):
-            raise ValueError("أدخل خيارات مختلفة وحدد الإجابة الصحيحة")
-        return self
-
-
-class AssessmentContent(StrictModel):
-    instructions: str = Field(default="", max_length=2000)
-    questions: list[Question] = Field(min_length=1, max_length=30)
 
 
 class DocumentWrite(StrictModel):
