@@ -145,7 +145,7 @@ def test_publishing_validates_quiz_lessons_categories_and_links(client):
 
 def test_platform_publication_and_legacy_adoption_keep_existing_url(client):
     admin, editor, workspace, _ = setup(client, ['workshops'], True)
-    row = create(client, editor, workspace, 'workshops', category='scientific', summary='ملخص')
+    row = create(client, editor, workspace, 'workshops', category='scientific', summary='ملخص', event_date='2026-11-22')
     published = state(client, editor, row, 'published')
     assert published.status_code == 200, published.text
     assert client.get(f"/api/platform/entries/cms-{row['id']}").json()['title'] == row['title']
@@ -155,7 +155,7 @@ def test_platform_publication_and_legacy_adoption_keep_existing_url(client):
     assert response.status_code == 201, response.text
     adopted = response.json()
     assert client.post('/api/cms/legacy/adopt', headers=admin, json={'entry_id': 'old-workshop', 'workspace_id': workspace['id']}).status_code == 409
-    edit = {key: adopted[key] for key in ('workspace_id', 'module', 'title', 'payload', 'version')}; edit['title'] = 'ورشة محدثة'
+    edit = {key: adopted[key] for key in ('workspace_id', 'module', 'title', 'payload', 'version')}; edit['title'] = 'ورشة محدثة'; edit['payload']['event_date'] = '2026-11-22'
     updated = client.put(f"/api/cms/content/{adopted['id']}", headers=admin, json=edit).json()
     assert state(client, admin, updated, 'published').status_code == 200
     assert client.get('/api/platform/entries/old-workshop').json()['title'] == 'ورشة محدثة'

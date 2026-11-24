@@ -10,6 +10,7 @@ from sqlalchemy import text
 
 from app.api.auth import router as auth_router
 from app.cms.api import router as cms_router
+from app.cms.workshop_calendar import router as workshop_calendar_router
 from app.exams.api import router as exams_router
 from app.platform.api import install_platform
 from app.api.curriculum import router as curriculum_router
@@ -51,6 +52,7 @@ app.add_middleware(
 
 install_platform(app)
 app.include_router(cms_router)
+app.include_router(workshop_calendar_router)
 app.include_router(exams_router)
 app.include_router(auth_router)
 app.include_router(users_router)

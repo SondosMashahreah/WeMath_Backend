@@ -78,6 +78,12 @@ class ContentWrite(Strict):
     payload: Payload
     version: int | None = Field(default=None, ge=1)
 
+    @model_validator(mode="after")
+    def workshop_date_range(self):
+        if self.module == "workshops" and self.payload.event_date and not 1900 <= self.payload.event_date.year <= 2199:
+            raise ValueError("موعد الورشة يجب أن يكون بين 1900 و2199")
+        return self
+
     @field_validator("module")
     @classmethod
     def valid_module(cls, value):

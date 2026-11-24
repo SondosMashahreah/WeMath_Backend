@@ -1,5 +1,5 @@
 SECTIONS = {
-    "workshops": {"scientific": "ورشات عالمية", "universities": "جامعات ومؤسسات", "directorates": "مديريات التربية"},
+    "workshops": {"ministry": "الوزارة", "scientific": "ورشات عالمية", "universities": "جامعات ومؤسسات", "directorates": "مديريات التربية"},
     "competitions": {"scientific": "مسابقات محلية", "international": "مسابقات عالمية"},
     "initiatives": {"schools": "مبادرات المدارس", "directorates": "مبادرات المديريات", "teachers": "مبادرات المعلمين", "students": "مبادرات الطلاب", "teacher_stories": "قصص نجاح المعلمين", "student_stories": "قصص نجاح الطلاب", "school_stories": "قصص نجاح المدارس"},
     "teacher_resources": {"activities": "أنشطة وألعاب", "questions": "بنك الأسئلة", "preparation": "نماذج تحضير"},

@@ -77,8 +77,8 @@ def validate_publish(db, row):
             raise HTTPException(422, "اختر تصنيفًا صحيحًا")
         if not data.get("body") or not data.get("summary"):
             raise HTTPException(422, "أكمل الوصف المختصر والتفاصيل قبل النشر")
-        if row.module == "competitions" and not data.get("event_date"):
-            raise HTTPException(422, "موعد المسابقة مطلوب")
+        if row.module in ("competitions", "workshops") and not data.get("event_date"):
+            raise HTTPException(422, "موعد الورشة أو المسابقة مطلوب للنشر")
     row.payload = data
 
 
