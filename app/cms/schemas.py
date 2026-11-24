@@ -2,7 +2,7 @@ from app.exams.schemas import DraftQuestion
 from typing import Literal
 from datetime import date
 from urllib.parse import urlsplit
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, EmailStr, ConfigDict, Field, field_validator, model_validator
 from app.schemas.auth import AccountCredentials
 from .catalog import MODULES
 
@@ -11,7 +11,11 @@ class Strict(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
 
+TeamType = Literal["students", "teachers", "other"]
+
+
 class WorkspaceWrite(Strict):
+    team_type: TeamType = "other"
     name: str = Field(min_length=2, max_length=150)
     modules: list[str] = Field(min_length=1, max_length=10)
     member_ids: list[int] = Field(default_factory=list, max_length=500)
@@ -28,6 +32,18 @@ class WorkspaceWrite(Strict):
 
 
 class StaffCreate(AccountCredentials):
+    email: EmailStr
+    team_type: TeamType = "other"
+    create_workspace: bool = False
+    modules: list[str] = Field(default_factory=lambda: list(MODULES), min_length=1, max_length=10)
+
+    @field_validator("modules")
+    @classmethod
+    def valid_modules(cls, value):
+        if len(set(value)) != len(value) or not set(value) <= MODULES.keys():
+            raise ValueError("أقسام غير صالحة")
+        return value
+
     full_name: str = Field(min_length=2, max_length=150)
 
 
@@ -36,7 +52,15 @@ class StaffUpdate(Strict):
     password: str | None = Field(default=None, min_length=8, max_length=128)
 
 
+class MediaReference(Strict):
+    asset_id: str = Field(pattern=r"^[0-9a-f-]{36}$")
+    kind: Literal["image", "video"]
+    alt: str = Field(default="", max_length=300)
+    caption: str = Field(default="", max_length=1000)
+
+
 class Payload(Strict):
+    media: list[MediaReference] = Field(default_factory=list, max_length=20)
     summary: str = Field(default="", max_length=500)
     body: str = Field(default="", max_length=30000)
     source_url: str = Field(default="", max_length=2000)

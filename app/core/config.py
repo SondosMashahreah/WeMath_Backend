@@ -4,6 +4,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    CMS_MEDIA_WORKSPACE_MB: int = Field(default=512, ge=64, le=10240)
+
     APP_NAME: str = "WeMath API"
     APP_HOST: str = "127.0.0.1"
     APP_PORT: int = 8100

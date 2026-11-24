@@ -1,3 +1,4 @@
+from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, or_, select
@@ -9,7 +10,7 @@ from app.db.database import get_db
 from app.models import Role, User, UserRole
 from . import service
 from .catalog import MODULES, blank_template
-from .models import Audit, Content, Membership, Workspace
+from .models import Audit, Content, Membership, Workspace, StaffProfile
 from app.platform.models import PlatformEntry
 from .schemas import Payload, ContentWrite, StaffCreate, StaffUpdate, Transition, WorkspaceWrite
 
@@ -23,7 +24,7 @@ def staff(user=Depends(get_current_user), db=Depends(get_db)):
 
 
 def workspace_payload(db, row):
-    return {"id": row.id, "name": row.name, "modules": row.modules, "can_publish": row.can_publish,
+    return {"id": row.id, "name": row.name, "team_type": row.team_type, "modules": row.modules, "can_publish": row.can_publish,
             "active": row.active, "version": row.version,
             "member_ids": list(db.scalars(select(Membership.user_id).where(Membership.workspace_id == row.id)))}
 
@@ -43,12 +44,14 @@ def template(module: str, workspace_id: int, user=Depends(staff), db: Session = 
 
 
 @router.get("/staff")
-def list_staff(q: str = Query("", max_length=100), offset: int = Query(0, ge=0), user=Depends(admin), db: Session = Depends(get_db)):
+def list_staff(team_type: Literal["students", "teachers", "other"] | None = None, q: str = Query("", max_length=100), offset: int = Query(0, ge=0), user=Depends(admin), db: Session = Depends(get_db)):
     filters = [Role.name == "content_editor", or_(User.full_name.icontains(q, autoescape=True), User.username.icontains(q, autoescape=True))]
+    if team_type:
+        filters.append(User.id.in_(select(StaffProfile.user_id).where(StaffProfile.team_type == team_type)) if team_type != "other" else ~User.id.in_(select(StaffProfile.user_id).where(StaffProfile.team_type != "other")))
     statement = select(User).join(UserRole).join(Role).where(*filters)
     total = db.scalar(select(func.count()).select_from(statement.subquery()))
     rows = db.scalars(statement.order_by(User.id).offset(offset).limit(50)).all()
-    return {"items": [{"id": row.id, "name": row.full_name, "username": row.username, "active": row.is_active} for row in rows], "total": total}
+    return {"items": [{"id": row.id, "name": row.full_name, "username": row.username, "active": row.is_active, "email": row.email, "team_type": (db.get(StaffProfile, row.id).team_type if db.get(StaffProfile, row.id) else "other"), "invitation_status": "disabled"} for row in rows], "total": total}
 
 
 @router.post("/staff", status_code=201)
@@ -60,17 +63,27 @@ def create_staff(data: StaffCreate, user=Depends(admin), db: Session = Depends(g
         role = Role(name="content_editor", description="Content entry team")
         db.add(role)
         db.flush()
-    row = User(username=data.username, full_name=data.full_name, password_hash=hash_password(data.password))
+    email = str(data.email).lower()
+    if db.scalar(select(User.id).where(func.lower(User.email) == email)):
+        raise HTTPException(409, "الإيميل مستخدم مسبقًا")
+    row = User(username=data.username, full_name=data.full_name, email=email, password_hash=hash_password(data.password))
     db.add(row)
     try:
         db.flush()
         db.add(UserRole(user_id=row.id, role_id=role.id))
+        db.add(StaffProfile(user_id=row.id, team_type=data.team_type, invitation_status="disabled"))
+        if data.create_workspace:
+            workspace = Workspace(name=f"فريق {data.full_name}"[:150], team_type=data.team_type, modules=data.modules, can_publish=False, active=True)
+            db.add(workspace)
+            db.flush()
+            db.add(Membership(workspace_id=workspace.id, user_id=row.id))
+            service.audit(db, user, "workspace.save", workspace.id)
         service.audit(db, user, "staff.create", row.id)
         db.commit()
     except IntegrityError:
         db.rollback()
-        raise HTTPException(409, "اسم المستخدم موجود مسبقًا") from None
-    return {"id": row.id, "name": row.full_name, "username": row.username, "active": row.is_active}
+        raise HTTPException(409, "اسم المستخدم أو الإيميل موجود مسبقًا") from None
+    return {"id": row.id, "name": row.full_name, "username": row.username, "active": row.is_active, "email": row.email, "team_type": data.team_type, "invitation_status": "disabled"}
 
 
 @router.patch("/staff/{staff_id}")
@@ -96,6 +109,7 @@ def save_workspace(db, user, data, row):
     if row.id:
         row.version += 1
         db.execute(delete(Membership).where(Membership.workspace_id == row.id))
+    row.team_type = data.team_type
     row.name, row.modules, row.can_publish, row.active = data.name, data.modules, data.can_publish, data.active
     db.add(row)
     db.flush()
@@ -120,10 +134,12 @@ def edit_workspace(workspace_id: int, data: WorkspaceWrite, user=Depends(admin),
 
 
 @router.get("/content")
-def list_content(workspace_id: int | None = None, module: str | None = None, status: str | None = None,
+def list_content(team_type: Literal["students", "teachers", "other"] | None = None, workspace_id: int | None = None, module: str | None = None, status: str | None = None,
                  q: str = Query("", max_length=100), offset: int = Query(0, ge=0), limit: int = Query(25, ge=1, le=100),
                  user=Depends(staff), db: Session = Depends(get_db)):
     workspaces = service.accessible_workspaces(db, user)
+    if team_type:
+        workspaces = [w for w in workspaces if w.team_type == team_type]
     if workspace_id is not None:
         service.workspace_access(db, user, workspace_id, module)
         workspaces = [row for row in workspaces if row.id == workspace_id]
@@ -145,6 +161,8 @@ def new_content(db, user, data):
     workspace = service.workspace_access(db, user, data.workspace_id, data.module)
     if data.module not in workspace.modules:
         raise HTTPException(422, "أضيفي القسم إلى اللوحة قبل إدخال محتواه")
+    from .media import validate_media
+    validate_media(db, data.workspace_id, data.module, data.payload.model_dump())
     row = Content(workspace_id=data.workspace_id, module=data.module, title=data.title,
                   payload=data.payload.model_dump(mode="json"), author_id=user.id, status="draft", version=1)
     db.add(row)
@@ -187,6 +205,8 @@ def edit_content(content_id: int, data: ContentWrite, user=Depends(staff), db: S
         raise HTTPException(422, "لا يمكن نقل المادة إلى لوحة أو قسم آخر")
     if row.status == "archived":
         raise HTTPException(409, "استعد المادة كمسودة أولًا")
+    from .media import validate_media
+    validate_media(db, data.workspace_id, data.module, data.payload.model_dump())
     row.title, row.payload = data.title, data.payload.model_dump(mode="json")
     # Published snapshot remains live until explicitly republished or withdrawn.
     row.status, row.version = "draft", row.version + 1
@@ -248,6 +268,8 @@ def adopt(data: Adopt, user=Depends(admin), db: Session = Depends(get_db)):
                           event_date=entry.event_date, **{key: details[key] for key in ("organizer", "audience", "location", "registration_start", "registration_end", "attachments", "results", "examples") if details.get(key) is not None})
     except ValueError:
         raise HTTPException(422, "بيانات المادة السابقة لا تطابق النموذج؛ راجعي روابطها وأسئلتها قبل نقلها") from None
+    from .media import validate_media
+    validate_media(db, data.workspace_id, entry.section, payload.model_dump())
     row = Content(workspace_id=data.workspace_id, module=entry.section, title=entry.title,
                   payload=payload.model_dump(mode="json"), author_id=user.id, source_entry_id=entry.id,
                   status="published" if entry.published else "draft", version=1)

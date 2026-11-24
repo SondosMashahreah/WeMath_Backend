@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, Text, func
+from sqlalchemy import Boolean, LargeBinary, DateTime, ForeignKey, Integer, JSON, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import Base
 
@@ -8,6 +8,7 @@ class Workspace(Base):
     __tablename__ = "cms_workspaces"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(150))
+    team_type: Mapped[str] = mapped_column(String(20), default="other", server_default="other")
     modules: Mapped[list] = mapped_column(JSON)
     can_publish: Mapped[bool] = mapped_column(Boolean, default=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -65,3 +66,30 @@ class ExamBankItem(Base):
     version: Mapped[int] = mapped_column(Integer, default=1)
     author_id: Mapped[int] = mapped_column(ForeignKey('users.id'))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class StaffProfile(Base):
+    __tablename__ = 'cms_staff_profiles'
+    user_id: Mapped[int] = mapped_column(ForeignKey('users.id'), primary_key=True)
+    team_type: Mapped[str] = mapped_column(String(20), default='other')
+    invitation_status: Mapped[str] = mapped_column(String(20), default='disabled')
+
+
+class MediaAsset(Base):
+    __tablename__ = 'cms_media_assets'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    workspace_id: Mapped[int] = mapped_column(ForeignKey('cms_workspaces.id'), index=True)
+    module: Mapped[str] = mapped_column(String(40))
+    author_id: Mapped[int] = mapped_column(ForeignKey('users.id'))
+    filename: Mapped[str] = mapped_column(String(180))
+    kind: Mapped[str] = mapped_column(String(10))
+    mime: Mapped[str] = mapped_column(String(40))
+    size: Mapped[int] = mapped_column(Integer)
+    data: Mapped[bytes] = mapped_column(LargeBinary, deferred=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PublishedMedia(Base):
+    __tablename__ = 'cms_published_media'
+    content_id: Mapped[int] = mapped_column(ForeignKey('cms_content.id'), primary_key=True)
+    asset_id: Mapped[str] = mapped_column(ForeignKey('cms_media_assets.id'), primary_key=True)

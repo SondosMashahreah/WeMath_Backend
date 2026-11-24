@@ -1,12 +1,12 @@
 from datetime import date, datetime, timezone
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from app.models import CurriculumLesson, User
 from app.platform.models import PlatformEntry
 from app.platform.schemas import AssessmentContent
 from app.services.auth_service import get_user_roles
 from .catalog import MODULES, RESOURCE_LABELS
-from .models import Audit, Content, Membership, PublishedResource, Workspace
+from .models import Audit, Content, Membership, PublishedResource, Workspace, PublishedMedia
 
 
 def is_admin(db, user):
@@ -61,6 +61,8 @@ def serialize(row):
 
 
 def validate_publish(db, row):
+    from .media import validate_media
+    validate_media(db, row.workspace_id, row.module, row.payload, publishing=True)
     data = dict(row.payload)
     if data.get("questions"):
         try:
@@ -70,7 +72,7 @@ def validate_publish(db, row):
     if row.module in RESOURCE_LABELS:
         if not data.get("lesson_id") or not db.get(CurriculumLesson, data["lesson_id"]):
             raise HTTPException(422, "اختر درسًا موجودًا قبل النشر")
-        if not (row.module == "quiz" and data.get("questions")) and not data.get("source_url") and not data.get("body"):
+        if not data.get("questions") and not data.get("media") and not data.get("source_url") and not data.get("body"):
             raise HTTPException(422, "أضف نص المورد أو رابطه قبل النشر")
     else:
         if data.get("category") not in MODULES[row.module]["categories"]:
@@ -92,7 +94,7 @@ def publish(db, row):
             db.add(resource)
         resource.lesson_id, resource.resource_type = data["lesson_id"], row.module
         resource.payload = {"content_id": row.id, "title": row.title, "text": data["body"], "url": data["source_url"] or None,
-                            "attachments": data["attachments"], "questions": data["questions"]}
+                            "attachments": data["attachments"], "questions": data["questions"], "media": data.get("media", [])}
     else:
         key = row.source_entry_id or f"cms-{row.id}"
         entry = db.get(PlatformEntry, key)
@@ -105,10 +107,15 @@ def publish(db, row):
         entry.archived, entry.published, entry.is_demo = False, True, False
         entry.activity = AssessmentContent.model_validate({"questions": data["questions"], "instructions": ""}).model_dump() if data.get("questions") else None
         entry.details = {key: data[key] for key in ("organizer", "audience", "location", "registration_start", "registration_end", "attachments", "results", "examples")}
+        entry.details = {**entry.details, "media": data.get("media", [])}
         entry.published_at = datetime.now(timezone.utc)
+
+    from .media import publish_media
+    publish_media(db, row)
 
 
 def unpublish(db, row):
+    db.execute(delete(PublishedMedia).where(PublishedMedia.content_id == row.id))
     resource = db.get(PublishedResource, row.id)
     if resource:
         db.delete(resource)

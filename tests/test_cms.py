@@ -20,7 +20,7 @@ def account(client, username, admin=False):
 
 def setup(client, modules=None, publish=False):
     admin = account(client, 'administrator', True)
-    response = client.post('/api/cms/staff', headers=admin, json={'username': 'editor', 'full_name': 'مدخل بيانات', 'password': PASSWORD})
+    response = client.post('/api/cms/staff', headers=admin, json={'email': 'editor@example.org', 'username': 'editor', 'full_name': 'مدخل بيانات', 'password': PASSWORD})
     assert response.status_code == 201, response.text
     editor_id = response.json()['id']
     editor = {'Authorization': 'Bearer ' + client.post('/api/auth/login', json={'username': 'editor', 'password': PASSWORD}).json()['access_token']}
