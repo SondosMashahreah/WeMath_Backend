@@ -6,3 +6,5 @@ from app.models.curriculum import CurriculumBook, CurriculumUnit, CurriculumLess
 from app.models.learning import StudentProfile, ParentChild, LessonProgress, AssessmentResult
 
 from app.cms.models import Workspace, Membership, Content, PublishedResource, Audit, ExamBankItem, StaffProfile, MediaAsset, PublishedMedia
+
+from app.games.models import TeacherGame

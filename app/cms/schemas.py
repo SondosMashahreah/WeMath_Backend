@@ -1,3 +1,4 @@
+from app.games.schemas import DraftGame
 from app.exams.schemas import DraftQuestion
 from typing import Literal
 from datetime import date
@@ -60,6 +61,7 @@ class MediaReference(Strict):
 
 
 class Payload(Strict):
+    game: DraftGame | None = None
     media: list[MediaReference] = Field(default_factory=list, max_length=20)
     summary: str = Field(default="", max_length=500)
     body: str = Field(default="", max_length=30000)

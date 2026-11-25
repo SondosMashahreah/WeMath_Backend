@@ -44,11 +44,11 @@ def template(module: str, workspace_id: int, user=Depends(staff), db: Session = 
 
 
 @router.get("/staff")
-def list_staff(team_type: Literal["students", "teachers", "other"] | None = None, q: str = Query("", max_length=100), offset: int = Query(0, ge=0), user=Depends(admin), db: Session = Depends(get_db)):
-    filters = [Role.name == "content_editor", or_(User.full_name.icontains(q, autoescape=True), User.username.icontains(q, autoescape=True))]
+def list_staff(include_teachers: bool = False, team_type: Literal["students", "teachers", "other"] | None = None, q: str = Query("", max_length=100), offset: int = Query(0, ge=0), user=Depends(admin), db: Session = Depends(get_db)):
+    filters = [Role.name.in_(["content_editor", "teacher"] if include_teachers else ["content_editor"]), or_(User.full_name.icontains(q, autoescape=True), User.username.icontains(q, autoescape=True))]
     if team_type:
         filters.append(User.id.in_(select(StaffProfile.user_id).where(StaffProfile.team_type == team_type)) if team_type != "other" else ~User.id.in_(select(StaffProfile.user_id).where(StaffProfile.team_type != "other")))
-    statement = select(User).join(UserRole).join(Role).where(*filters)
+    statement = select(User).join(UserRole).join(Role).where(*filters).distinct()
     total = db.scalar(select(func.count()).select_from(statement.subquery()))
     rows = db.scalars(statement.order_by(User.id).offset(offset).limit(50)).all()
     return {"items": [{"id": row.id, "name": row.full_name, "username": row.username, "active": row.is_active, "email": row.email, "team_type": (db.get(StaffProfile, row.id).team_type if db.get(StaffProfile, row.id) else "other"), "invitation_status": "disabled"} for row in rows], "total": total}
@@ -104,8 +104,8 @@ def save_workspace(db, user, data, row):
     service.check_version(row, data.version) if row.id else None
     for member in set(data.member_ids):
         person = db.get(User, member)
-        if not person or "content_editor" not in service.get_user_roles(db, member):
-            raise HTTPException(422, "اختر حسابات إدخال بيانات موجودة")
+        if not person or not {"content_editor", "teacher"}.intersection(service.get_user_roles(db, member)):
+            raise HTTPException(422, "اختر حسابات إدخال بيانات أو معلمين موجودة")
     if row.id:
         row.version += 1
         db.execute(delete(Membership).where(Membership.workspace_id == row.id))

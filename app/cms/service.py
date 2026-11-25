@@ -64,6 +64,11 @@ def validate_publish(db, row):
     from .media import validate_media
     validate_media(db, row.workspace_id, row.module, row.payload, publishing=True)
     data = dict(row.payload)
+    if data.get('game'):
+        if row.module != 'game': raise HTTPException(422, 'قالب اللعبة خاص بقسم الألعاب')
+        from app.games.schemas import Game
+        try: data['game'] = Game.model_validate(data['game']).model_dump()
+        except ValueError as error: raise HTTPException(422, str(error)) from None
     if data.get("questions"):
         try:
             data["questions"] = AssessmentContent.model_validate({"questions": data["questions"], "instructions": ""}).model_dump()["questions"]
@@ -72,7 +77,7 @@ def validate_publish(db, row):
     if row.module in RESOURCE_LABELS:
         if not data.get("lesson_id") or not db.get(CurriculumLesson, data["lesson_id"]):
             raise HTTPException(422, "اختر درسًا موجودًا قبل النشر")
-        if not data.get("questions") and not data.get("media") and not data.get("source_url") and not data.get("body"):
+        if not data.get("game") and not data.get("questions") and not data.get("media") and not data.get("source_url") and not data.get("body"):
             raise HTTPException(422, "أضف نص المورد أو رابطه قبل النشر")
     else:
         if data.get("category") not in MODULES[row.module]["categories"]:
@@ -94,7 +99,7 @@ def publish(db, row):
             db.add(resource)
         resource.lesson_id, resource.resource_type = data["lesson_id"], row.module
         resource.payload = {"content_id": row.id, "title": row.title, "text": data["body"], "url": data["source_url"] or None,
-                            "attachments": data["attachments"], "questions": data["questions"], "media": data.get("media", [])}
+                            "attachments": data["attachments"], "questions": data["questions"], "media": data.get("media", []), "game": data.get("game")}
     else:
         key = row.source_entry_id or f"cms-{row.id}"
         entry = db.get(PlatformEntry, key)
@@ -107,7 +112,7 @@ def publish(db, row):
         entry.archived, entry.published, entry.is_demo = False, True, False
         entry.activity = AssessmentContent.model_validate({"questions": data["questions"], "instructions": ""}).model_dump() if data.get("questions") else None
         entry.details = {key: data[key] for key in ("organizer", "audience", "location", "registration_start", "registration_end", "attachments", "results", "examples")}
-        entry.details = {**entry.details, "media": data.get("media", [])}
+        entry.details = {**entry.details, "media": data.get("media", []), "game": data.get("game")}
         entry.published_at = datetime.now(timezone.utc)
 
     from .media import publish_media
@@ -129,4 +134,7 @@ def live_resources(db, lesson_id, defaults):
     grouped = {}
     for row in rows:
         grouped.setdefault(row.resource_type, []).append(row.payload)
+    from app.games.models import TeacherGame
+    for game in db.scalars(select(TeacherGame).where(TeacherGame.published_lesson_id == lesson_id, TeacherGame.published_payload.is_not(None)).order_by(TeacherGame.id)):
+        grouped.setdefault('game', []).append(game.published_payload)
     return [{**resource, "demo": False, "text": "", "url": None, "items": grouped[resource["id"]]} if resource["id"] in grouped else resource for resource in defaults]
